@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/pedido.dart';
 import 'tela_detalhes.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TelaPrincipal extends StatefulWidget {
   const TelaPrincipal({super.key});
@@ -10,40 +11,58 @@ class TelaPrincipal extends StatefulWidget {
 }
 
 class _TelaPrincipalState extends State<TelaPrincipal> {
-  List<Pedido> meusPedidos = [
-    Pedido(numero: 1024, status: 'Aguardando Retirada', valor: 45.90),
-    Pedido(numero: 1025, status: 'Em Rota', valor: 89.00),
-    Pedido(numero: 1026, status: 'Entregue', valor: 32.50),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Painel de Entregas')),
-      body: ListView.builder(
-        itemCount: meusPedidos.length,
-        itemBuilder: (context, index) {
-          return ListTile(
-            leading: Icon(
-              Icons.fastfood,
-              color: meusPedidos[index].status == 'Entregue'
-                  ? Colors.green
-                  : Colors.orange,
-            ),
-            title: Text('Pedido #${meusPedidos[index].numero}'),
-            subtitle: Text('Status: ${meusPedidos[index].status}'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              setState(() {
-                meusPedidos[index].status = 'Entregue';
-              });
+      body: StreamBuilder<QuerySnapshot>(
+        // 1. Apontamos o "tubo" para a nossa coleção criada na web
+        stream: FirebaseFirestore.instance.collection('pedidos').snapshots(),
+        builder: (context, snapshot) {
+          // 2. Se estiver carregando, mostra a bolinha girando (Loading)
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      TelaDetalhes(pedido: meusPedidos[index]),
+          // 3. Se a coleção estiver vazia ou der erro
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('Nenhum pedido na nuvem.'));
+          }
+
+          // 4. Pegamos a lista de documentos da nuvem
+          final documentos = snapshot.data!.docs;
+
+          return ListView.builder(
+            itemCount: documentos.length,
+            itemBuilder: (context, index) {
+              // 5. Extrai o JSON que veio do Google
+              var dados = documentos[index].data() as Map<String, dynamic>;
+
+              // 6. Converte para a nossa Classe Pedido
+              Pedido pedidoReal = Pedido(
+                numero: dados['numero'] ?? 0,
+                status: dados['status'] ?? 'Desconhecido',
+                valor: (dados['valor'] ?? 0.0).toDouble(),
+              );
+
+              return ListTile(
+                leading: Icon(
+                  Icons.fastfood,
+                  color: pedidoReal.status == 'Entregue'
+                      ? Colors.green
+                      : Colors.orange,
                 ),
+                title: Text('Pedido #${pedidoReal.numero}'),
+                subtitle: Text('Status: ${pedidoReal.status}'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TelaDetalhes(pedido: pedidoReal),
+                    ),
+                  );
+                },
               );
             },
           );
