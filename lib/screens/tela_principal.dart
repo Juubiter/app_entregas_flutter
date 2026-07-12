@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/pedido.dart';
 import 'tela_detalhes.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 
 class TelaPrincipal extends StatefulWidget {
   const TelaPrincipal({super.key});
@@ -16,30 +17,22 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
     return Scaffold(
       appBar: AppBar(title: const Text('Painel de Entregas')),
       body: StreamBuilder<QuerySnapshot>(
-        // 1. Apontamos o "tubo" para a nossa coleção criada na web
         stream: FirebaseFirestore.instance.collection('pedidos').snapshots(),
         builder: (context, snapshot) {
-          // 2. Se estiver carregando, mostra a bolinha girando (Loading)
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          // 3. Se a coleção estiver vazia ou der erro
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text('Nenhum pedido na nuvem.'));
           }
-
-          // 4. Pegamos a lista de documentos da nuvem
           final documentos = snapshot.data!.docs;
 
           return ListView.builder(
             itemCount: documentos.length,
             itemBuilder: (context, index) {
-              // 5. Extrai o JSON que veio do Google
               var dados = documentos[index].data() as Map<String, dynamic>;
-
-              // 6. Converte para a nossa Classe Pedido
               Pedido pedidoReal = Pedido(
+                id: documentos[index].id,
                 numero: dados['numero'] ?? 0,
                 status: dados['status'] ?? 'Desconhecido',
                 valor: (dados['valor'] ?? 0.0).toDouble(),
@@ -63,6 +56,59 @@ class _TelaPrincipalState extends State<TelaPrincipal> {
                     ),
                   );
                 },
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.add),
+        onPressed: () {
+          TextEditingController valorController = TextEditingController();
+
+          showDialog(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: const Text('Nova Entrega'),
+                content: TextField(
+                  controller: valorController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Valor do Pedido (R\$)',
+                    hintText: 'Ex: 45.50',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      double valorDigitado =
+                          double.tryParse(
+                            valorController.text.replaceAll(',', '.'),
+                          ) ??
+                          0.0;
+                      int numeroGerado = Random().nextInt(9000) + 1000;
+                      await FirebaseFirestore.instance
+                          .collection('pedidos')
+                          .add({
+                            'numero': numeroGerado,
+                            'status': 'Em Preparo',
+                            'valor': valorDigitado,
+                          });
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    child: const Text('Criar Pedido'),
+                  ),
+                ],
               );
             },
           );
